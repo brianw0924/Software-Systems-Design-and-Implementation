@@ -1,0 +1,15 @@
+# Advanced Topics in Software Systems Design and Implementation HW1
+
+## PART 1 - Add new system call to Linux
+* add new system call number at linux/include/uapi/asm-generic/unistd.h
+* implement the function at linux/kernel/sys.c
+* The kernel patch is named "patch" in the same directory
+ 
+## PART 2 - Write a simple shell in C
+* support cd, exit, getcpu, execution
+
+## References
+* https://github.com/zemocasu/W4118-Shell
+* https://brennan.io/2015/01/16/write-a-shell-in-c/
+* https://www.linuxbnb.net/home/adding-a-system-call-to-linux-arm-architecture/
+* https://shengyu7697.github.io/cpp-ctrl-c-signal/
