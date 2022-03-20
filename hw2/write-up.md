@@ -26,7 +26,7 @@ For Masquerade, run the test_masq program with a positive integer argument, indi
 ./test_masq <NUM_MASQ>
 ```
 
-For Hook/Unhook, simply run the test_hook program.
+For hook system call, simply run the test_hook program. The rootkit will automatically unhook after the LKM be removed.
 ```bash
 ./test_hook
 ```
