@@ -1,6 +1,6 @@
 # Makefile
 
-        make KDIR=/PATH/TO/linux-5.4-source CROSS=aarch64-linux-gnu-
+make KDIR=/PATH/TO/linux-5.4-source CROSS=aarch64-linux-gnu-
 
 # Hide/Unhide
 * Linux kernel modules are stored in doubly linked list.
@@ -16,7 +16,7 @@
 # Test programs
 For Hide/Unhide, simply run the test_hide program. If the rootkit is already hidden, the program will unhide it; If it's not hidden, the program will hide it.
 
-        ./test_hide
+./test_hide
 
 For Masquerade, run the test_masq program with a positive integer argument, indicating the number of process name you want to masquerade. The user have to enter the orig_name and new_name in order.
 
@@ -24,7 +24,7 @@ For Masquerade, run the test_masq program with a positive integer argument, indi
 
 For Hook/Unhook, simply run the test_hook program.
 
-        ./test_hook
+./test_hook
 
 # References
 * https://xcellerator.github.io/posts/linux_rootkits_01/
