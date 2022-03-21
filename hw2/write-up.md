@@ -10,7 +10,7 @@ make KDIR=/PATH/TO/linux-5.4-source CROSS=aarch64-linux-gnu-
 
 # Masquerade Process Name
 * The process name is stored in the `comm[]` in `task_struct`.
-* To masquerade it, I use `get_task_comm` to get the `comm[]`, and then directly strcpy the new name to `comm[]`.
+* To masquerade it, I use `get_task_comm()` to get the `comm[]`, and then directly strcpy the new name to `comm[]`.
 
 # Hook/Unhook System Call
 * Use `lookup_symbols()` to find system call table, and then store the original system calls.
@@ -22,6 +22,10 @@ make KDIR=/PATH/TO/linux-5.4-source CROSS=aarch64-linux-gnu-
     Simply return 0 to prevent kernel from shutting down.
 * To unhook system calls, I restore original system calls back to the system call table.
 
+# Bonus: Hook mkdir
+* Linux implement mkdir by the system call `mkdirat`. I disable it by changing the return value to -1, so the user can't mkdir.
+* Additionally, I print the dir_name that the user attempt to create. The dir_name is pass by the second parameter in regs.
+
 # Test programs
 
 For Hide/Unhide, simply run the test_hide program. If the rootkit is already hidden, the program will unhide it; If it's not hidden, the program will hide it.
@@ -29,7 +33,7 @@ For Hide/Unhide, simply run the test_hide program. If the rootkit is already hid
 ./test_hide
 ```
 
-For Masquerade, run the test_masq program with a positive integer argument, indicating the number of process name you want to masquerade. The user have to enter the orig_name and new_name in order.
+For Masquerade, run the test_masq program with a positive integer argument, indicating the number of process name you want to masquerade. The user have to enter the orig_name and new_name in order. You can check the result using `ps ao pid,comm <PIDs>`.
 ```bash
 ./test_masq <NUM_MASQ>
 ```
@@ -39,8 +43,8 @@ For hook system call, simply run the test_hook program. The rootkit will automat
 ./test_hook
 ```
 # Contributions
-* 王韋翰: Hide, Maspuerade system call
-* 黃珮欣: Hook system call
+* 王韋翰: Hide/Unhide rootkit; Masquerade process name
+* 黃珮欣: Hook/Unhook system call
 
 # References
 * https://xcellerator.github.io/posts/linux_rootkits_01/
