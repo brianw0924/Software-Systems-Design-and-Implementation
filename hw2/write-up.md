@@ -22,8 +22,8 @@ make KDIR=/PATH/TO/linux-5.4-source CROSS=aarch64-linux-gnu-
     Simply return 0 to prevent kernel from shutting down.
 * To unhook system calls, I restore original system calls back to the system call table.
 
-# Bonus: Hook mkdir
-* Linux implement mkdir by the system call `mkdirat`. I disable it by changing the return value to -1, so the user can't mkdir.
+# Bonus: Hook mkdirat
+* Linux implement mkdir by the system call `mkdirat`. I disable it by changing the return value to `-EEXIST`, so the user can't mkdir, and the console will always display `mkdir: cannot create directory ‘<dir_name>’: File exists`
 * Additionally, I print the dir_name that the user attempt to create. The dir_name is passed by the second parameter in regs.
 
 # Test programs
