@@ -16,7 +16,7 @@ index 1fc8faa6e973..4e7def488676 100644
  /*
   * 32 bit systems traditionally used different
 diff --git a/kernel/sys.c b/kernel/sys.c
-index a611d1d58c7d..c631441eacf7 100644
+index a611d1d58c7d..44a83b05d5a9 100644
 --- a/kernel/sys.c
 +++ b/kernel/sys.c
 @@ -4,7 +4,7 @@
@@ -62,7 +62,7 @@ index a611d1d58c7d..c631441eacf7 100644
 +	// remap target PTE to remapped_pte
 +
 +	down_read(&sheep_mm->mmap_sem);
-+	pr_info("#####################");
++	pr_info("#####################\n");
 +	for(; i < pte_count; i++, next_vaddr+= (1 << PMD_SHIFT)) {
 +		pr_info("next_vaddr: %lx\n", next_vaddr);
 +		test_vma = find_vma(test_mm, args->begin_pte_vaddr + i * PAGE_SIZE);
@@ -91,7 +91,7 @@ index a611d1d58c7d..c631441eacf7 100644
 +			*((unsigned long*)(args->begin_fpt_vaddr + i * 8)) = 0;
 +		}
 +	}
-+	pr_info("#####################");
++	pr_info("#####################\n");
 +	up_read(&sheep_mm->mmap_sem);
 +
 +	
