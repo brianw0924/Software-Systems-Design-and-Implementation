@@ -16,7 +16,7 @@ index 1fc8faa6e973..4e7def488676 100644
  /*
   * 32 bit systems traditionally used different
 diff --git a/kernel/sys.c b/kernel/sys.c
-index a611d1d58c7d..89d0ae3b18d4 100644
+index a611d1d58c7d..0036a7044a2a 100644
 --- a/kernel/sys.c
 +++ b/kernel/sys.c
 @@ -4,7 +4,7 @@
@@ -28,7 +28,7 @@ index a611d1d58c7d..89d0ae3b18d4 100644
  #include <linux/export.h>
  #include <linux/mm.h>
  #include <linux/utsname.h>
-@@ -2584,6 +2584,55 @@ SYSCALL_DEFINE1(sysinfo, struct sysinfo __user *, info)
+@@ -2584,6 +2584,62 @@ SYSCALL_DEFINE1(sysinfo, struct sysinfo __user *, info)
  	return 0;
  }
  
@@ -36,10 +36,10 @@ index a611d1d58c7d..89d0ae3b18d4 100644
 +{
 +
 +	// int remap_pfn_range (
-+	//	struct vm_area_struct * vma,
-+	// 	unsigned long addr,
-+	// 	unsigned long pfn,
-+	// 	unsigned long size,
++	//	struct vm_area_struct * vma, (vma of the target addr)
++	// 	unsigned long addr, (target user addr)
++	// 	unsigned long pfn, (the physical addr from kernel memory)
++	// 	unsigned long size, (size you want to map, should align page size)
 +	// 	pgprot_t prot
 +	// );
 +	pgd_t *pgd;
@@ -49,34 +49,41 @@ index a611d1d58c7d..89d0ae3b18d4 100644
 +	int ret;
 +	unsigned long page_count = (args->end_vaddr - args->begin_vaddr) >> 12;
 +	unsigned long i = 0;
-+	struct task_struct *task = get_pid_task(find_get_pid(args->pid), PIDTYPE_PID);
-+	struct mm_struct *mm = get_task_mm(task);
-+	struct vm_area_struct *vma;
-+	down_read(&mm->mmap_sem);
-+	vma = mm->mmap;	
-+	for(; i < page_count; i++, vma = vma->vm_next) {
-+		pr_info("va: %lx\n", args->begin_vaddr);
++	struct task_struct *sheep_task = get_pid_task(find_get_pid(args->pid), PIDTYPE_PID);
++	struct task_struct *test_task = get_pid_task(find_get_pid(current->pid), PIDTYPE_PID);
++	struct mm_struct *sheep_mm = get_task_mm(sheep_task);
++	struct mm_struct *test_mm = get_task_mm(test_task);
++	struct vm_area_struct *sheep_vma, *test_vma;
++
++
++	pr_info("page_count = %ld\n", page_count);
++
++	down_read(&sheep_mm->mmap_sem);
++
++	sheep_vma = find_vma(sheep_mm, args->begin_vaddr);
++	test_vma = find_vma(test_mm, args->begin_pte_vaddr);
++	for(; i < page_count; i++,
++		sheep_vma = sheep_vma->vm_next,
++		test_vma = test_vma->vm_next) {
++
 +		// walk through page table, find the pte physical addr
-+		pgd = pgd_offset(mm, vma->vm_start);
-+		pud = pud_offset(pgd, vma->vm_start);
-+		pmd = pmd_offset(pud, vma->vm_start);
-+		pte = pte_offset_map(pmd, vma->vm_start);
++		pgd = pgd_offset(sheep_mm, sheep_vma->vm_start);
++		pud = pud_offset(pgd, sheep_vma->vm_start);
++		pmd = pmd_offset(pud, sheep_vma->vm_start);
++		pte = pte_offset_map(pmd, sheep_vma->vm_start);
 +		pr_info("pmd_page_paddr (should be PTE paddr): %llx\n\n", pmd_page_paddr(READ_ONCE(*(pmd))));
-+		pr_info("addr=%lx\npfn=%lx\nsize=%lx\n\n",
-+			(unsigned long)(args->begin_pte_vaddr + i * 4096),
-+			(unsigned long)pmd_page_paddr(READ_ONCE(*(pmd))),
-+			(unsigned long)4096);
++
 +		// remap target PTE table to mine
 +		ret = remap_pfn_range(
-+			vma,
-+			(unsigned long)(args->begin_pte_vaddr + i * 4096),
-+			(unsigned long)pmd_page_paddr(READ_ONCE(*(pmd))),
-+			(unsigned long)4096,
-+			vma->vm_page_prot
++			test_vma,
++			(args->begin_pte_vaddr + i * 4096),
++			pmd_page_paddr(READ_ONCE(*(pmd))),
++			4096,
++			test_vma->vm_page_prot
 +			);
 +		pr_info("return: %d\n", ret);
 +	}
-+	up_read(&mm->mmap_sem);
++	up_read(&sheep_mm->mmap_sem);
 +
 +	return 0;
 +}

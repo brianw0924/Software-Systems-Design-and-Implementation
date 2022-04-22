@@ -1,3 +1,6 @@
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <sys/types.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -65,6 +68,46 @@ char *create_shellcode(unsigned long len) {
 	return shellcode_addr;
 }
 
+int expose_pte(pid_t pid, unsigned long begin_vaddr, unsigned long end_vaddr) {
+
+	/* allocate memory for flatten table & remapped table
+	 * void *mmap(void *addr, size_t length, int prot, int flags,
+	 *	int fd, off_t offset);
+	 */
+	size_t len = end_vaddr - begin_vaddr;
+	if (len & 0x000000000fff)
+		return -EINVAL;
+
+	unsigned long begin_fpt_vaddr = (unsigned long)mmap(NULL, len,
+			PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	unsigned long end_fpt_vaddr = begin_fpt_vaddr + len;
+	unsigned long begin_pte_vaddr = (unsigned long)mmap(NULL, len,
+			PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	unsigned long end_pte_vaddr = begin_pte_vaddr + len;
+	
+	/* set arguments by inspecting the /proc/[PID]/maps
+	 * the code section is at top r-xp part
+	 */
+	printf("begin_fpt_vaddr=%lx\nend_fpt_vaddr=%lx\nbegin_pte_vaddr=%lx\nend_pte_vaddr=%lx\nbegin_vaddr=%lx\nend_vaddr=%lx\n"
+	,begin_fpt_vaddr,end_fpt_vaddr,begin_pte_vaddr,end_pte_vaddr, begin_vaddr, end_vaddr);
+	struct expose_pte_args args = {
+		pid,
+		begin_fpt_vaddr,
+		end_fpt_vaddr,
+		begin_pte_vaddr,
+		end_pte_vaddr,
+		begin_vaddr,
+		end_vaddr
+	};
+
+	// system call
+	long ret = syscall(436, &args);
+	printf("%ld\n", ret);
+
+
+	// print va1 xxx pa1 yyy, ....
+}
+
 int main(int argc, char* argv[])
 {
 	int ret = 0, len;
@@ -72,9 +115,12 @@ int main(int argc, char* argv[])
 
 //	len = ...
 
-	sc_begin = create_shellcode(len); 
+	// sc_begin = create_shellcode(len); 
 //	(*(void(*)())sc_begin)();
 
-	while (1) {}
+	// while (1) {}
+
+	ret = expose_pte((pid_t)atoi(argv[1]), strtoul(argv[2], NULL, 16), strtoul(argv[3], NULL, 16));
+
 	return ret;
 }
