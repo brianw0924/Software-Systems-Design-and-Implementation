@@ -68,22 +68,28 @@ char *create_shellcode(unsigned long len) {
 	return shellcode_addr;
 }
 
+#define PMD_SHIFT 21
+#define PTRS_PER_PMD (1 << 9)
+#define PAGE_SIZE 4096
+
 int expose_pte(pid_t pid, unsigned long begin_vaddr, unsigned long end_vaddr) {
 
 	/* allocate memory for flatten table & remapped table
 	 * void *mmap(void *addr, size_t length, int prot, int flags,
 	 *	int fd, off_t offset);
 	 */
-	size_t len = end_vaddr - begin_vaddr;
-	if (len & 0x000000000fff)
+	if ((end_vaddr - begin_vaddr) & 0x000000000fff)
 		return -EINVAL;
 
-	unsigned long begin_fpt_vaddr = (unsigned long)mmap(NULL, len,
+	// calculate how many PTE within begin_vaddr ~ end_vaddr
+	unsigned long pte_count = 1 + ((end_vaddr >> PMD_SHIFT) - (begin_vaddr >> PMD_SHIFT));
+	printf("pte_count: %ld\n", pte_count);
+	unsigned long begin_fpt_vaddr = (unsigned long)mmap(NULL, pte_count * 8,
 			PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-	unsigned long end_fpt_vaddr = begin_fpt_vaddr + len;
-	unsigned long begin_pte_vaddr = (unsigned long)mmap(NULL, len,
+	unsigned long end_fpt_vaddr = begin_fpt_vaddr + pte_count * 8;
+	unsigned long begin_pte_vaddr = (unsigned long)mmap(NULL, pte_count * PAGE_SIZE,
 			PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-	unsigned long end_pte_vaddr = begin_pte_vaddr + len;
+	unsigned long end_pte_vaddr = begin_pte_vaddr + pte_count * PAGE_SIZE;
 	
 	/* set arguments by inspecting the /proc/[PID]/maps
 	 * the code section is at top r-xp part
@@ -101,11 +107,9 @@ int expose_pte(pid_t pid, unsigned long begin_vaddr, unsigned long end_vaddr) {
 	};
 
 	// system call
-	long ret = syscall(436, &args);
-	printf("%ld\n", ret);
+	int ret = syscall(436, &args);
 
-
-	// print va1 xxx pa1 yyy, ....
+	return ret;
 }
 
 int main(int argc, char* argv[])
@@ -121,6 +125,6 @@ int main(int argc, char* argv[])
 	// while (1) {}
 
 	ret = expose_pte((pid_t)atoi(argv[1]), strtoul(argv[2], NULL, 16), strtoul(argv[3], NULL, 16));
-
+	printf("%d\n", ret);
 	return ret;
 }
