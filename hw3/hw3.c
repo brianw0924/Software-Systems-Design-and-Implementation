@@ -69,7 +69,9 @@ char *create_shellcode(unsigned long len) {
 }
 
 #define PMD_SHIFT 21
-#define PTRS_PER_PMD (1 << 9)
+#define PAGE_SHIFT 12
+#define PTRS_PER_PTE 512
+#define PTRS_PER_PMD 512
 #define PAGE_SIZE 4096
 
 int expose_pte(pid_t pid, unsigned long begin_vaddr, unsigned long end_vaddr) {
@@ -116,13 +118,21 @@ int expose_pte(pid_t pid, unsigned long begin_vaddr, unsigned long end_vaddr) {
 
 	// system call
 	int ret = syscall(436, &args);
-	unsigned long *fpt_p = (unsigned long*)(args.begin_fpt_vaddr);
-	for( int i = 0; i < pte_count; i++, fpt_p+=1) {
-		printf("%lx should equal to %lx\n", *fpt_p, args.begin_pte_vaddr + i * PAGE_SIZE);
-	}
 
-	unsigned long *pte_p = (unsigned long*)(args.begin_pte_vaddr);
-	printf("physical address of PTE: %lx\n", *pte_p);
+	unsigned long va = args.begin_vaddr, pa, fpt_offset, pte_offset, pte_addr, *pte_p;
+	unsigned long idx = 1;
+	for(; va < args.end_vaddr; va+=PAGE_SIZE, idx++) {
+
+		fpt_offset = (va >> PMD_SHIFT) - (args.begin_vaddr >> PMD_SHIFT);
+		pte_addr = *((unsigned long*)(args.begin_fpt_vaddr) + fpt_offset);
+		if(pte_addr) {
+			pte_p = (unsigned long*)pte_addr;
+			pte_offset = ((va) >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
+			printf("va%ld %lx pa%ld %lx\n", idx, va, idx, *(pte_p + pte_offset));
+		} else {
+			printf("va%ld %lx pa%ld not exists.\n", idx, va, idx);
+		}
+	}
 	return ret;
 }
 
@@ -134,9 +144,9 @@ int main(int argc, char* argv[])
 //	len = ...
 
 	// sc_begin = create_shellcode(len); 
-//	(*(void(*)())sc_begin)();
+	// (*(void(*)())sc_begin)();
 
 	ret = expose_pte((pid_t)atoi(argv[1]), strtoul(argv[2], NULL, 16), strtoul(argv[3], NULL, 16));
-	// while (1) {}
+	while (1) {}
 	return ret;
 }

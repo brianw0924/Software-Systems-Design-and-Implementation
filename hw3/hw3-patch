@@ -16,7 +16,7 @@ index 1fc8faa6e973..4e7def488676 100644
  /*
   * 32 bit systems traditionally used different
 diff --git a/kernel/sys.c b/kernel/sys.c
-index a611d1d58c7d..c21c3fe50b8f 100644
+index a611d1d58c7d..d69b8e5a69d1 100644
 --- a/kernel/sys.c
 +++ b/kernel/sys.c
 @@ -4,7 +4,7 @@
@@ -28,7 +28,7 @@ index a611d1d58c7d..c21c3fe50b8f 100644
  #include <linux/export.h>
  #include <linux/mm.h>
  #include <linux/utsname.h>
-@@ -2581,6 +2581,88 @@ SYSCALL_DEFINE1(sysinfo, struct sysinfo __user *, info)
+@@ -2581,6 +2581,91 @@ SYSCALL_DEFINE1(sysinfo, struct sysinfo __user *, info)
  	if (copy_to_user(info, &val, sizeof(struct sysinfo)))
  		return -EFAULT;
  
@@ -70,7 +70,7 @@ index a611d1d58c7d..c21c3fe50b8f 100644
 +		masked_end_vaddr = masked_end_vaddr & PMD_MASK;
 +
 +	for(; masked_begin_vaddr <= masked_end_vaddr; i++, masked_begin_vaddr+= (1 << PMD_SHIFT)) {
-+		pr_info("masked_begin_vaddr: %lx\n", masked_begin_vaddr);
++		// pr_info("masked_begin_vaddr: %lx\n", masked_begin_vaddr);
 +		test_vma = find_vma(test_mm, args->begin_pte_vaddr + i * PAGE_SIZE);
 +
 +		// walk through page table, find the pte physical addr
@@ -79,18 +79,19 @@ index a611d1d58c7d..c21c3fe50b8f 100644
 +		pmd = pmd_offset(pud, masked_begin_vaddr);
 +		pte = pte_offset_map(pmd, masked_begin_vaddr);
 +		pte_paddr = pmd_page_paddr(READ_ONCE(*(pmd)));
-+		pr_info("PTE pa: %llx\n", pmd_page_paddr(READ_ONCE(*(pmd))));
++		// pr_info("PTE pfn: %lx\n", __phys_to_pfn(pmd_page_paddr(READ_ONCE(*(pmd)))));
++		// pr_info("PTE phys: %llx\n", pmd_page_paddr(READ_ONCE(*(pmd))));
 +		if(pte_paddr) {
 +			// remap PTE
++			// pfn 跟 phys 只差在 shift >> 12
 +			ret = remap_pfn_range(
 +				test_vma,
 +				(args->begin_pte_vaddr + i * PAGE_SIZE),
-+				pmd_page_paddr(READ_ONCE(*(pmd))),
++				__phys_to_pfn(pmd_page_paddr(READ_ONCE(*(pmd)))),
 +				PAGE_SIZE,
 +				test_vma->vm_page_prot
 +				);
-+			pr_info("return value: %d\n", ret);
-+			
++			// pr_info("return value: %d\n", ret);
 +			// fill in flattened table entry
 +			*((unsigned long*)(args->begin_fpt_vaddr + i * 8)) = args->begin_pte_vaddr + i * PAGE_SIZE;
 +		} else {
@@ -103,8 +104,10 @@ index a611d1d58c7d..c21c3fe50b8f 100644
 +		pud = pud_offset(pgd, args->begin_vaddr + i * PAGE_SIZE);
 +		pmd = pmd_offset(pud, args->begin_vaddr + i * PAGE_SIZE);
 +		pte = pte_offset_map(pmd, args->begin_vaddr + i * PAGE_SIZE);
-+		pte_paddr = pmd_page_paddr(READ_ONCE(*(pmd)));
-+		pr_info("pa%d: %llx\n", i+1, pte_val(*pte));
++		// pr_info("PTE pfn: %lx\n", __phys_to_pfn(pmd_page_paddr(READ_ONCE(*(pmd)))));
++		// pr_info("PTE phys: %llx\n", pmd_page_paddr(READ_ONCE(*(pmd))));
++		// pr_info("va: %lx pa: %llx\n", args->begin_vaddr + i * PAGE_SIZE, pte_val(*pte));
++
 +	}
 +	pr_info("#####################\n");
 +	up_read(&sheep_mm->mmap_sem);
