@@ -74,18 +74,20 @@ char *create_shellcode(unsigned long len) {
 #define PTRS_PER_PMD 512
 #define PAGE_SIZE 4096
 
-int expose_pte(pid_t pid, unsigned long begin_vaddr, unsigned long end_vaddr) {
+int va_inspection(pid_t pid, unsigned long begin_vaddr, unsigned long end_vaddr) {
 
 	/* allocate memory for flatten table & remapped table
 	 * void *mmap(void *addr, size_t length, int prot, int flags,
 	 *	int fd, off_t offset);
 	 */
+	
+	// Check align 4KB
 	if ((end_vaddr - begin_vaddr) & 0x000000000fff)
 		return -EINVAL;
 
-	// calculate how many PTE within begin_vaddr ~ end_vaddr
+	// calculate how many PTE from begin_vaddr to end_vaddr
 	unsigned long pte_count = 1 + ((end_vaddr >> PMD_SHIFT) - (begin_vaddr >> PMD_SHIFT));
-	printf("pte_count: %ld\n", pte_count);
+	// printf("pte_count: %ld\n", pte_count);
 	unsigned long begin_fpt_vaddr = (unsigned long)mmap(NULL, pte_count * 8,
 			PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	if (!begin_fpt_vaddr) {
@@ -104,8 +106,8 @@ int expose_pte(pid_t pid, unsigned long begin_vaddr, unsigned long end_vaddr) {
 	/* set arguments by inspecting the /proc/[PID]/maps
 	 * the code section is at top r-xp part
 	 */
-	printf("begin_fpt_vaddr=%lx\nend_fpt_vaddr=%lx\nbegin_pte_vaddr=%lx\nend_pte_vaddr=%lx\nbegin_vaddr=%lx\nend_vaddr=%lx\n"
-	,begin_fpt_vaddr,end_fpt_vaddr,begin_pte_vaddr,end_pte_vaddr, begin_vaddr, end_vaddr);
+	// printf("begin_fpt_vaddr=%lx\nend_fpt_vaddr=%lx\nbegin_pte_vaddr=%lx\nend_pte_vaddr=%lx\nbegin_vaddr=%lx\nend_vaddr=%lx\n"
+	// ,begin_fpt_vaddr,end_fpt_vaddr,begin_pte_vaddr,end_pte_vaddr, begin_vaddr, end_vaddr);
 	struct expose_pte_args args = {
 		pid,
 		begin_fpt_vaddr,
@@ -136,17 +138,126 @@ int expose_pte(pid_t pid, unsigned long begin_vaddr, unsigned long end_vaddr) {
 	return ret;
 }
 
+unsigned long *get_target_pte_p(pid_t pid, unsigned long begin_vaddr, unsigned long end_vaddr) {
+
+	/* allocate memory for flatten table & remapped table
+	 * void *mmap(void *addr, size_t length, int prot, int flags,
+	 *	int fd, off_t offset);
+	 */
+
+	// calculate how many PTE from begin_vaddr to end_vaddr
+	unsigned long pte_count = 1 + ((end_vaddr >> PMD_SHIFT) - (begin_vaddr >> PMD_SHIFT));
+	// printf("pte_count: %ld\n", pte_count);
+	unsigned long begin_fpt_vaddr = (unsigned long)mmap(NULL, pte_count * 8,
+			PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	if (!begin_fpt_vaddr) {
+		fprintf(stderr, "error: %s\n", strerror(errno));
+		exit(-1);
+	};
+	unsigned long end_fpt_vaddr = begin_fpt_vaddr + pte_count * 8;
+	unsigned long begin_pte_vaddr = (unsigned long)mmap(NULL, pte_count * PAGE_SIZE,
+			PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	if (!begin_pte_vaddr) {
+		fprintf(stderr, "error: %s\n", strerror(errno));
+		exit(-1);
+	};
+	unsigned long end_pte_vaddr = begin_pte_vaddr + pte_count * PAGE_SIZE;
+	
+	/* set arguments by inspecting the /proc/[PID]/maps
+	 * the code section is at top r-xp part
+	 */
+	// printf("begin_fpt_vaddr=%lx\nend_fpt_vaddr=%lx\nbegin_pte_vaddr=%lx\nend_pte_vaddr=%lx\nbegin_vaddr=%lx\nend_vaddr=%lx\n"
+	// ,begin_fpt_vaddr,end_fpt_vaddr,begin_pte_vaddr,end_pte_vaddr, begin_vaddr, end_vaddr);
+	struct expose_pte_args args = {
+		pid,
+		begin_fpt_vaddr,
+		end_fpt_vaddr,
+		begin_pte_vaddr,
+		end_pte_vaddr,
+		begin_vaddr,
+		end_vaddr
+	};
+
+	// system call
+	int ret = syscall(436, &args);
+
+	unsigned long va = args.begin_vaddr, pa, fpt_offset, pte_offset, pte_addr, *pte_p;
+	fpt_offset = (va >> PMD_SHIFT) - (args.begin_vaddr >> PMD_SHIFT);
+	pte_addr = *((unsigned long*)(args.begin_fpt_vaddr) + fpt_offset);
+	if(pte_addr) {
+		pte_p = (unsigned long*)pte_addr;
+		pte_offset = ((va) >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
+		pa = *(pte_p + pte_offset);
+		printf("va m%lx pa %lx\n", va, pa);
+	} else {
+		printf("va %lx pa not exists.\n", va);
+	}
+	return pte_p + pte_offset;
+}
+
+int code_injection(pid_t sc_pid, unsigned long sc_begin, unsigned long *target_pte_p) {
+
+	// calculate how many PTE from begin_vaddr to end_vaddr
+	unsigned long pte_count = 1 + (((sc_begin + PAGE_SIZE) >> PMD_SHIFT) - (sc_begin >> PMD_SHIFT));
+	// printf("pte_count: %ld\n", pte_count);
+	unsigned long begin_fpt_vaddr = (unsigned long)mmap(NULL, pte_count * 8,
+			PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	if (!begin_fpt_vaddr) {
+		fprintf(stderr, "error: %s\n", strerror(errno));
+		exit(-1);
+	};
+	unsigned long end_fpt_vaddr = begin_fpt_vaddr + pte_count * 8;
+	unsigned long begin_pte_vaddr = (unsigned long)mmap(NULL, pte_count * PAGE_SIZE,
+			PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	if (!begin_pte_vaddr) {
+		fprintf(stderr, "error: %s\n", strerror(errno));
+		exit(-1);
+	};
+	unsigned long end_pte_vaddr = begin_pte_vaddr + pte_count * PAGE_SIZE;
+	
+	/* set arguments by inspecting the /proc/[PID]/maps
+	 * the code section is at top r-xp part
+	 */
+	// printf("begin_fpt_vaddr=%lx\nend_fpt_vaddr=%lx\nbegin_pte_vaddr=%lx\nend_pte_vaddr=%lx\nbegin_vaddr=%lx\nend_vaddr=%lx\n"
+	// ,begin_fpt_vaddr,end_fpt_vaddr,begin_pte_vaddr,end_pte_vaddr, begin_vaddr, end_vaddr);
+	struct expose_pte_args args = {
+		sc_pid,
+		begin_fpt_vaddr,
+		end_fpt_vaddr,
+		begin_pte_vaddr,
+		end_pte_vaddr,
+		sc_begin,
+		sc_begin + PAGE_SIZE
+	};
+
+	int ret = syscall(436, &args);
+	printf("syscall ret: %d\n",ret);
+	unsigned long va = sc_begin, pa, fpt_offset, pte_offset, pte_addr, *pte_p;
+	fpt_offset = (va >> PMD_SHIFT) - (args.begin_vaddr >> PMD_SHIFT);
+	pte_addr = *((unsigned long*)(args.begin_fpt_vaddr) + fpt_offset);
+	if(pte_addr) {
+		pte_p = (unsigned long*)pte_addr;
+		pte_offset = ((va) >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
+		printf("va %lx pa %lx\n", va, *(pte_p + pte_offset));
+	} else {
+		printf("pa not exists.\n");
+	}
+	*target_pte_p = *(pte_p + pte_offset);
+
+	return 0;
+}
+
 int main(int argc, char* argv[])
 {
 	int ret = 0, len;
-	char *sc_begin;
 
-//	len = ...
+	// Virtual Address Space Inspection
+	unsigned long *target_pte_p = get_target_pte_p((pid_t)atoi(argv[1]), strtoul(argv[2], NULL, 16), strtoul(argv[3], NULL, 16));
+	printf("expose pte ret: %d\n",ret);
 
-	// sc_begin = create_shellcode(len); 
-	// (*(void(*)())sc_begin)();
-
-	ret = expose_pte((pid_t)atoi(argv[1]), strtoul(argv[2], NULL, 16), strtoul(argv[3], NULL, 16));
-	while (1) {}
+	// Code Injection
+	ret = code_injection((pid_t)atoi(argv[4]), strtoul(argv[5], NULL, 16), target_pte_p);
+	printf("code injection ret: %d\n",ret);
+	// while (1) {}
 	return ret;
 }
