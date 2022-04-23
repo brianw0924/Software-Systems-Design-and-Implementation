@@ -86,9 +86,17 @@ int expose_pte(pid_t pid, unsigned long begin_vaddr, unsigned long end_vaddr) {
 	printf("pte_count: %ld\n", pte_count);
 	unsigned long begin_fpt_vaddr = (unsigned long)mmap(NULL, pte_count * 8,
 			PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	if (!begin_fpt_vaddr) {
+		fprintf(stderr, "error: %s\n", strerror(errno));
+		exit(-1);
+	};
 	unsigned long end_fpt_vaddr = begin_fpt_vaddr + pte_count * 8;
 	unsigned long begin_pte_vaddr = (unsigned long)mmap(NULL, pte_count * PAGE_SIZE,
 			PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	if (!begin_pte_vaddr) {
+		fprintf(stderr, "error: %s\n", strerror(errno));
+		exit(-1);
+	};
 	unsigned long end_pte_vaddr = begin_pte_vaddr + pte_count * PAGE_SIZE;
 	
 	/* set arguments by inspecting the /proc/[PID]/maps
@@ -108,7 +116,13 @@ int expose_pte(pid_t pid, unsigned long begin_vaddr, unsigned long end_vaddr) {
 
 	// system call
 	int ret = syscall(436, &args);
+	unsigned long *fpt_p = (unsigned long*)(args.begin_fpt_vaddr);
+	for( int i = 0; i < pte_count; i++, fpt_p+=1) {
+		printf("%lx should equal to %lx\n", *fpt_p, args.begin_pte_vaddr + i * PAGE_SIZE);
+	}
 
+	unsigned long *pte_p = (unsigned long*)(args.begin_pte_vaddr);
+	printf("physical address of PTE: %lx\n", *pte_p);
 	return ret;
 }
 
@@ -122,9 +136,7 @@ int main(int argc, char* argv[])
 	// sc_begin = create_shellcode(len); 
 //	(*(void(*)())sc_begin)();
 
-	// while (1) {}
-
 	ret = expose_pte((pid_t)atoi(argv[1]), strtoul(argv[2], NULL, 16), strtoul(argv[3], NULL, 16));
-	printf("%d\n", ret);
+	// while (1) {}
 	return ret;
 }
