@@ -16,7 +16,7 @@ index 1fc8faa6e973..4e7def488676 100644
  /*
   * 32 bit systems traditionally used different
 diff --git a/kernel/sys.c b/kernel/sys.c
-index a611d1d58c7d..d69b8e5a69d1 100644
+index a611d1d58c7d..5f3e1f43182c 100644
 --- a/kernel/sys.c
 +++ b/kernel/sys.c
 @@ -4,7 +4,7 @@
@@ -28,40 +28,70 @@ index a611d1d58c7d..d69b8e5a69d1 100644
  #include <linux/export.h>
  #include <linux/mm.h>
  #include <linux/utsname.h>
-@@ -2581,6 +2581,91 @@ SYSCALL_DEFINE1(sysinfo, struct sysinfo __user *, info)
- 	if (copy_to_user(info, &val, sizeof(struct sysinfo)))
- 		return -EFAULT;
+@@ -2584,6 +2584,128 @@ SYSCALL_DEFINE1(sysinfo, struct sysinfo __user *, info)
+ 	return 0;
+ }
  
-+	return 0;
-+}
-+
 +SYSCALL_DEFINE1(expose_pte, struct expose_pte_args __user *, args)
 +{
-+
-+	// int remap_pfn_range (
-+	//	struct vm_area_struct * vma, (vma of the target addr)
-+	// 	unsigned long addr, (target user addr)
-+	// 	unsigned long pfn, (the physical addr from kernel memory)
-+	// 	unsigned long size, (size you want to map, should align page size)
-+	// 	pgprot_t prot
-+	// );
 +	pgd_t *pgd;
 +	pud_t *pud;
 +	pmd_t *pmd;
 +	pte_t *pte;
 +	int ret;
-+	unsigned long i = 0;
-+	struct task_struct *sheep_task = get_pid_task(find_get_pid(args->pid), PIDTYPE_PID);
-+	struct task_struct *test_task = get_pid_task(find_get_pid(current->pid), PIDTYPE_PID);
-+	struct mm_struct *sheep_mm = get_task_mm(sheep_task);
-+	struct mm_struct *test_mm = get_task_mm(test_task);
-+	struct vm_area_struct *test_vma;
-+	unsigned long masked_begin_vaddr, masked_end_vaddr, pte_paddr;
++	unsigned long i;
++	struct pid *sheep_pid;
++	struct task_struct *sheep_task, *caller_task;
++	struct mm_struct *sheep_mm, *caller_mm;
++	struct vm_area_struct *caller_vma;
++	unsigned long masked_begin_vaddr, masked_end_vaddr;
++	unsigned long vaddr_pte_cnt, args_pte_cnt;
 +
-+	// remap target PTE to remapped_pte
++	sheep_pid = find_get_pid(args->pid);
++	if(!sheep_pid) {
++		pr_info("PID doesn't exist.\n");
++		return -EINVAL;
++	}
++
++	sheep_task = get_pid_task(find_get_pid(args->pid), PIDTYPE_PID);
++	caller_task = get_pid_task(find_get_pid(current->pid), PIDTYPE_PID);
++	sheep_mm = get_task_mm(sheep_task);
++	caller_mm = get_task_mm(caller_task);
++
++	/* check if begin < end */
++	if (args->begin_vaddr >= args->end_vaddr) {
++		pr_info("error: begin_vaddr >= end_vaddr\n");
++		return -EINVAL;
++	}
++
++	/* check addresses alignment (page size = 4KB) */
++	if(args->begin_fpt_vaddr & (PAGE_SIZE - 1)) {
++		pr_info("error: begin_fpt_vaddr (%ld) is not aligned\n",
++			args->begin_fpt_vaddr);
++		return -EINVAL;
++	}
++	if (args->begin_pte_vaddr & (PAGE_SIZE - 1)) {
++		pr_info("error: begin_pte_vaddr (%ld) is not aligned\n",
++			args->begin_pte_vaddr);
++		return -EINVAL;
++	}
++	if (args->end_pte_vaddr & (PAGE_SIZE - 1)) {
++		pr_info("error: end_pte_vaddr (%ld) is not aligned\n",
++			args->end_pte_vaddr);
++		return -EINVAL;
++	}
++	if (args->begin_vaddr & (PAGE_SIZE - 1)) {
++		pr_info("error: begin_vaddr (%ld) is not aligned\n",
++			args->begin_vaddr);
++		return -EINVAL;
++	}
++	if (args->end_vaddr & (PAGE_SIZE - 1)) {
++		pr_info("error: end_vaddr (%ld) is not aligned.\n",
++			args->end_vaddr);
++		return -EINVAL;
++	}
 +
 +	down_read(&sheep_mm->mmap_sem);
-+	pr_info("#####################\n");
 +	masked_begin_vaddr = args->begin_vaddr & PMD_MASK;
 +	masked_end_vaddr = args->end_vaddr;
 +	if ((masked_end_vaddr & ~PMD_MASK) == 0)
@@ -69,54 +99,61 @@ index a611d1d58c7d..d69b8e5a69d1 100644
 +	else
 +		masked_end_vaddr = masked_end_vaddr & PMD_MASK;
 +
-+	for(; masked_begin_vaddr <= masked_end_vaddr; i++, masked_begin_vaddr+= (1 << PMD_SHIFT)) {
-+		// pr_info("masked_begin_vaddr: %lx\n", masked_begin_vaddr);
-+		test_vma = find_vma(test_mm, args->begin_pte_vaddr + i * PAGE_SIZE);
++	/* check if the size of remapped PTE is enough */
++	vaddr_pte_cnt = 1 + (masked_end_vaddr >> PMD_SHIFT) - (masked_begin_vaddr >> PMD_SHIFT);
++	args_pte_cnt = (args->end_pte_vaddr - args->begin_pte_vaddr) / PAGE_SIZE;
++	if(vaddr_pte_cnt > args_pte_cnt) {
++		pr_info("error: remapped PTE is too small, vaddr_pte = %ld, args_pte %ld\n", vaddr_pte_cnt, args_pte_cnt);
++		return -EINVAL;
++	}
 +
-+		// walk through page table, find the pte physical addr
++	/* remap target PTE to remapped_pte */
++	for(i = 0; masked_begin_vaddr <= masked_end_vaddr; i++, masked_begin_vaddr+= (1 << PMD_SHIFT)) {
++		/* Find the vm_area_struct from given remapped pte vaddr */
++		caller_vma = find_vma(caller_mm, args->begin_pte_vaddr + i * PAGE_SIZE);
++		if(!caller_vma) {
++			pr_info("error: pte's vma doesn't exist. (va = %lx)\n", args->begin_pte_vaddr + i * PAGE_SIZE);
++			return -EINVAL;
++		} else if(!find_vma(caller_mm, args->begin_fpt_vaddr + i * 8)) {
++			pr_info("error: fpt's vma doesn't exist. (va = %lx)\n", args->begin_fpt_vaddr + i * 8);
++			return -EINVAL;
++		}
++		/* walk through page table, find the pte physical addr8 */
 +		pgd = pgd_offset(sheep_mm, masked_begin_vaddr);
++		if (pgd_none(*pgd) || pgd_bad(*pgd)) {
++			*((unsigned long*)(args->begin_fpt_vaddr + i * 8)) = 0;
++			continue;
++		}
 +		pud = pud_offset(pgd, masked_begin_vaddr);
++		if (pud_none(*pud) || pud_bad(*pud)) {
++			*((unsigned long*)(args->begin_fpt_vaddr + i * 8)) = 0;
++			continue;
++		}
 +		pmd = pmd_offset(pud, masked_begin_vaddr);
++		if (pmd_none(*pmd) || pmd_bad(*pmd)) {
++			*((unsigned long*)(args->begin_fpt_vaddr + i * 8)) = 0;
++			continue;
++		}
 +		pte = pte_offset_map(pmd, masked_begin_vaddr);
-+		pte_paddr = pmd_page_paddr(READ_ONCE(*(pmd)));
-+		// pr_info("PTE pfn: %lx\n", __phys_to_pfn(pmd_page_paddr(READ_ONCE(*(pmd)))));
-+		// pr_info("PTE phys: %llx\n", pmd_page_paddr(READ_ONCE(*(pmd))));
-+		if(pte_paddr) {
-+			// remap PTE
-+			// pfn 跟 phys 只差在 shift >> 12
++
++		/* remap PTE if exists */
++		if(pte) {
 +			ret = remap_pfn_range(
-+				test_vma,
++				caller_vma,
 +				(args->begin_pte_vaddr + i * PAGE_SIZE),
 +				__phys_to_pfn(pmd_page_paddr(READ_ONCE(*(pmd)))),
 +				PAGE_SIZE,
-+				test_vma->vm_page_prot
++				caller_vma->vm_page_prot
 +				);
-+			// pr_info("return value: %d\n", ret);
-+			// fill in flattened table entry
 +			*((unsigned long*)(args->begin_fpt_vaddr + i * 8)) = args->begin_pte_vaddr + i * PAGE_SIZE;
 +		} else {
 +			*((unsigned long*)(args->begin_fpt_vaddr + i * 8)) = 0;
 +		}
 +	}
-+	i = 0;
-+	for(; args->begin_vaddr + i * PAGE_SIZE < args->end_vaddr; i++) {
-+		pgd = pgd_offset(sheep_mm, args->begin_vaddr + i * PAGE_SIZE);
-+		pud = pud_offset(pgd, args->begin_vaddr + i * PAGE_SIZE);
-+		pmd = pmd_offset(pud, args->begin_vaddr + i * PAGE_SIZE);
-+		pte = pte_offset_map(pmd, args->begin_vaddr + i * PAGE_SIZE);
-+		// pr_info("PTE pfn: %lx\n", __phys_to_pfn(pmd_page_paddr(READ_ONCE(*(pmd)))));
-+		// pr_info("PTE phys: %llx\n", pmd_page_paddr(READ_ONCE(*(pmd))));
-+		// pr_info("va: %lx pa: %llx\n", args->begin_vaddr + i * PAGE_SIZE, pte_val(*pte));
-+
-+	}
-+	pr_info("#####################\n");
 +	up_read(&sheep_mm->mmap_sem);
++	return 0;
++}
 +
-+	
-+	
-+
-+
-+
- 	return 0;
- }
- 
+ #ifdef CONFIG_COMPAT
+ struct compat_sysinfo {
+ 	s32 uptime;
