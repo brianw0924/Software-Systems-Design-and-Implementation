@@ -5,6 +5,8 @@ make
 ```
 # System call: expose_pte
 ## Figure
+<p align="center"><img src="figure.jpg"></p>
+
 ## Explanation
 * The system call `expose_pte` converts the 4-level page table to a 2-level page table in userspace adress space.
 * First, we can know how many PTE page tables will be covered from `begin_vaddr` to `end_vaddr` by PMD index, which is at 29:21.
