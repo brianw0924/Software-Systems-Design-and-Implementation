@@ -33,7 +33,7 @@ cat /proc/[PID]/maps
 ```bash
 ./hw3-shellcode 1 shellcode &
 ```
-* Step 3: The shellcode will print pid and sc_begin_vaddr and sc_end_vaddr. Then run the test program to inject the code
+* Step 3: The shellcode will print pid and sc_begin_vaddr and sc_end_vaddr. Then run the test program to inject the code (The arguments might be too long in QEMU, you can new line by `\`)
 ```bash
 ./hw3-test <TARGET_PID> <TARGET_BEGIN_VADDR> <TARGET_END_VADDR> <SC_PID> <SC_BEGIN_VADDR> <SC_END_VADDR>
 ```
