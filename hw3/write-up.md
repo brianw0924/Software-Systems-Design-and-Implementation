@@ -21,7 +21,7 @@ cat /proc/[PID]/maps
 ```
 * Step 2: Use the test program to inspect the va to pa translation
 ```bash
-./hw3-test <TARGET_PID> <begin_vaddr> <end_vaddr>
+./hw3-test <TARGET_PID> <TARGET_BEGIN_VADDR> <TARGET_END_VADDR>
 ```
 * The test program will call expose_pte system call and then walk through the flattened page table and remapped PTE page tables to translate the va to pa from `begin_vaddr` to `end_vaddr` page by page.
 ## Code Injection
