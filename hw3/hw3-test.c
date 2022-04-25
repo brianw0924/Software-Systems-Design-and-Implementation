@@ -86,13 +86,36 @@ unsigned long *get_pte_p(struct expose_pte_args args, unsigned long va) {
                 return NULL;
 }
 
-int code_injection(pid_t sc_pid, unsigned long sc_begin, unsigned long *target_pte_p) {
-        struct expose_pte_args args = expose_pte(sc_pid, sc_begin, sc_begin + PAGE_SIZE);
-        unsigned long *pte_p = get_pte_p(args, sc_begin);
-        if(pte_p)
-                *target_pte_p = *(pte_p);
-        else
-                printf("error: pte not exists.\n");
+int code_injection(pid_t tar_pid, unsigned long tar_begin_vaddr, unsigned long tar_end_vaddr,
+        pid_t sc_pid, unsigned long sc_begin_vaddr, unsigned long sc_end_vaddr) {
+
+        if(((tar_end_vaddr - tar_begin_vaddr) >> PAGE_SHIFT) != ((sc_end_vaddr - sc_begin_vaddr) >> PAGE_SHIFT)){
+                printf("error: Number of shellcode page != Number of target page\n");
+                exit(-1);
+        }
+
+        unsigned long tar_va, sc_va, *sc_pte_p, *target_pte_p;
+        struct expose_pte_args tar_args = expose_pte(tar_pid, tar_begin_vaddr, tar_end_vaddr);
+        struct expose_pte_args sc_args = expose_pte(sc_pid, sc_begin_vaddr, sc_end_vaddr);
+
+        for(tar_va = tar_args.begin_vaddr, sc_va = sc_args.begin_vaddr;
+                sc_va < sc_args.end_vaddr;
+                        tar_va+=PAGE_SIZE, sc_va+=PAGE_SIZE) {
+                
+                // get the pte entry of shellcode and target process
+                sc_pte_p = get_pte_p(sc_args, sc_begin_vaddr);
+                if(!sc_pte_p){
+                        printf("error: shellcode pte not exists.\n");
+                        continue;
+                }
+                target_pte_p = get_pte_p(tar_args, tar_begin_vaddr);
+                if(!target_pte_p){
+                        printf("error: target pte not exists.\n");
+                        continue;
+                }
+                // change the entry mapping
+                *target_pte_p = *(sc_pte_p);
+        }
         return 0;
 }
 
@@ -111,6 +134,7 @@ int inspection(pid_t pid, unsigned long begin_vaddr, unsigned long end_vaddr) {
 }
 
 unsigned long *get_target_pte_p(pid_t tar_pid, unsigned long tar_begin, unsigned long tar_end) {
+        /* return the entry of the pte from given */
         struct expose_pte_args args = expose_pte(tar_pid, tar_begin, tar_end);
         return get_pte_p(args, tar_begin);
 }
@@ -125,9 +149,9 @@ int main(int argc, char *argv[]) {
         */
 
         // check arguments
-        if (argc != 4 && argc != 6) {
+        if (argc != 4 && argc != 7) {
                 printf("Virtual Address Space Inspection: %s <tar_pid> <tar_begin_va> <tar_end_va> <sc_pid> <sc_begin>\n", argv[0]);
-                printf("Code injection: %s <tar_pid> <tar_begin_va> <tar_end_va>\n", argv[0]);
+                printf("Code injection: %s <tar_pid> <tar_begin_va> <tar_end_va> <sc_pid> <sc_begin_va> <sc_end_va>\n", argv[0]);
                 return 0;
         }
 
@@ -137,10 +161,10 @@ int main(int argc, char *argv[]) {
         if (argc == 4) {
                 // va inspection
                 ret = inspection((pid_t)atoi(argv[1]), strtoul(argv[2], NULL, 16), strtoul(argv[3], NULL, 16));
-        } else if (argc == 6){
+        } else if (argc == 7){
                 // code injection
-                unsigned long *target_pte_p = get_target_pte_p((pid_t)atoi(argv[1]), strtoul(argv[2], NULL, 16), strtoul(argv[3], NULL, 16));
-                ret = code_injection((pid_t)atoi(argv[4]), strtoul(argv[5], NULL, 16), target_pte_p);
+                ret = code_injection((pid_t)atoi(argv[1]), strtoul(argv[2], NULL, 16), strtoul(argv[3], NULL, 16),
+                        (pid_t)atoi(argv[4]), strtoul(argv[5], NULL, 16), strtoul(argv[6], NULL, 16));
         }
         return ret;
 }

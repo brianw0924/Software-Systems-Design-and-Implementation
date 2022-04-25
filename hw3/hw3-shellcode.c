@@ -1,3 +1,4 @@
+#include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -95,7 +96,8 @@ __asm__(".global shellcode_echo\n"
     	"mov  x8, #221\n\t"
     	"svc 0");
 
-char *create_shellcode(unsigned long len) {
+#define PAGE_SIZE 4096
+char *create_shellcode(unsigned long len, char *option) {
 	int i;
 	char *shellcode_addr;
 
@@ -115,7 +117,15 @@ char *create_shellcode(unsigned long len) {
 
 	// copy shellcode to memory page
 	// TODO: replace |0x100| with your shellcode length
-	memcpy(shellcode_addr + len - 0x100, &shellcode_echo, 0x100);
+	if(strcmp(option, "shellcode") == 0){
+		memcpy(shellcode_addr + len - 0x100, &shellcode, 0x100);
+	}
+	else if(strcmp(option, "bonus") == 0){
+		memcpy(shellcode_addr + len - 0x100, &shellcode_echo, 0x100);
+	} else{
+		printf("error: Unknown argument\n");
+		exit(-1);
+	}
 
 	return shellcode_addr;
 }
@@ -124,13 +134,11 @@ int main(int argc, char* argv[])
 {
 	int ret = 0, len;
 	char *sc_begin;
-	if(argc > 1) 
-		len = 4096 * atoi(argv[1]);
-	else
-		len = 4096;
-	printf("len = %ld\n", len);
-	sc_begin = create_shellcode(len); 
-	printf("pid = %ld, sc_begin = %lx\n", getpid(), (unsigned long)sc_begin);
+	len = atoi(argv[1]) * PAGE_SIZE;
+	sc_begin = create_shellcode(len, argv[2]); 
+	printf("%ld\n",(unsigned long)sc_begin);
+	printf("pid: %d\nsc_begin_vaddr: %lx\nsc_end_vaddr: %lx\n",
+		getpid(), (unsigned long)sc_begin, (unsigned long)sc_begin + len);
 
 	// (*(void(*)())sc_begin)();
 	while (1) {}
