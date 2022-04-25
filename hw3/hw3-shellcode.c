@@ -1,6 +1,3 @@
-#include <unistd.h>
-#include <sys/syscall.h>
-#include <sys/types.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -43,40 +40,54 @@ __asm__(".global shellcode\n"
 	"mov  x8, #221\n\t" // SYS_execve
 	"svc 0");
 
-extern void shellcode_touch();
-__asm__(".global shellcode_touch\n"
-	"shellcode_touch:\n\t"
-	/* execve(path='/bin/touch', argv=['touch', 'a.log'], envp=0) */
-    	/* push b'/bin/touch\x00' */
-    	/* Set x14 = 8462109971917136431 = 0x756f742f6e69622f */
+extern void shellcode_echo();
+__asm__(".global shellcode_echo\n"
+	"shellcode_echo:\n\t"
+	/* execve(path='/bin/sh', argv=['sh', '-c', 'echo Hello > a.txt'], envp=0) */
+    	/* push b'/bin/sh\x00' */
+    	/* Set x14 = 29400045130965551 = 0x68732f6e69622f */
     	"mov  x14, #25135\n\t"
-   	"movk x14, #28265, lsl #16\n\t"
-  	"movk x14, #29743, lsl #0x20\n\t"
-    	"movk x14, #30063, lsl #0x30\n\t"
-    	"mov  x15, #26723\n\t"
-    	"stp x14, x15, [sp, #-16]!\n\t"
+    	"movk x14, #28265, lsl #16\n\t"
+    	"movk x14, #29487, lsl #0x20\n\t"
+    	"movk x14, #104, lsl #0x30\n\t"
+    	"str x14, [sp, #-16]!\n\t"
     	"mov  x0, sp\n\t"
-    	/* push argument array [b'touch\x00', b'a.log\x00'] */
-    	/* push b'touch\x00a.log\x00' */
-    	/* Set x14 = 3341952846830858100 = 0x2e61006863756f74 */
-    	"mov  x14, #28532\n\t"
-    	"movk x14, #25461, lsl #16\n\t"
-    	"movk x14, #104, lsl #0x20\n\t"
-    	"movk x14, #11873, lsl #0x30\n\t"
-    	/* Set x15 = 6778732 = 0x676f6c */
-    	"mov  x15, #28524\n\t"
-    	"movk x15, #103, lsl #16\n\t"
+    	/* push argument array [b'sh\x00', b'-c\x00', b'echo Hello > a.txt\x00'] */
+    	/* push b'sh\x00-c\x00echo Hello > a.txt\x00' */
+    	/* Set x14 = 8392585648151739936 = 0x7478742e61203e20 */
+    	"mov  x14, #15904\n\t"
+    	"movk x14, #24864, lsl #16\n\t"
+    	"movk x14, #29742, lsl #0x20\n\t"
+    	"movk x14, #29816, lsl #0x30\n\t"
+    	"mov  x15, xzr\n\t"
     	"stp x14, x15, [sp, #-16]!\n\t"
+    	/* Set x14 = 7162131208359405683 = 0x636500632d006873 */
+    	"mov  x14, #26739\n\t"
+    	"movk x14, #11520, lsl #16\n\t"
+    	"movk x14, #99, lsl #0x20\n\t"
+    	"movk x14, #25445, lsl #0x30\n\t"
+    	/* Set x15 = 8028911417952333672 = 0x6f6c6c6548206f68 */
+    	"mov  x15, #28520\n\t"
+    	"movk x15, #18464, lsl #16\n\t"
+    	"movk x15, #27749, lsl #0x20\n\t"
+    	"movk x15, #28524, lsl #0x30\n\t"
+    	"stp x14, x15, [sp, #-16]!\n\t"
+
     	/* push null terminator */
     	"mov  x14, xzr\n\t"
     	"str x14, [sp, #-8]!\n\t"
+
     	/* push pointers onto the stack */
     	"mov  x14, #14\n\t"
     	"add x14, sp, x14\n\t"
-    	"str x14, [sp, #-8]!\n\t" /* b'touch\x00' */
-    	"mov  x14, #16\n\t"
+    	"str x14, [sp, #-8]!\n\t" /* b'sh\x00' */
+    	"mov  x14, #19\n\t"
     	"add x14, sp, x14\n\t"
-    	"str x14, [sp, #-8]!\n\t" /* b'a.log\x00' */
+    	"str x14, [sp, #-8]!\n\t" /* b'echo Hello > a.txt\x00' */
+    	"mov  x14, #24\n\t"
+    	"add x14, sp, x14\n\t"
+    	"str x14, [sp, #-8]!\n\t" /* b'-c\x00' */
+
     	/* set x1 to the current top of the stack */
     	"mov  x1, sp\n\t"
     	"mov  x2, xzr\n\t"
@@ -104,21 +115,23 @@ char *create_shellcode(unsigned long len) {
 
 	// copy shellcode to memory page
 	// TODO: replace |0x100| with your shellcode length
-	memcpy(shellcode_addr + len - 0x100, &shellcode_touch, 0x100);
+	memcpy(shellcode_addr + len - 0x100, &shellcode_echo, 0x100);
 
 	return shellcode_addr;
 }
-
-#define PAGE_SIZE 4096
 
 int main(int argc, char* argv[])
 {
 	int ret = 0, len;
 	char *sc_begin;
+	if(argc > 1) 
+		len = 4096 * atoi(argv[1]);
+	else
+		len = 4096;
+	printf("len = %ld\n", len);
+	sc_begin = create_shellcode(len); 
+	printf("pid = %ld, sc_begin = %lx\n", getpid(), (unsigned long)sc_begin);
 
-	len = PAGE_SIZE;
-	sc_begin = create_shellcode(len);
-        printf("sc_begin: %lx len: %ld\n", (unsigned long)sc_begin, (unsigned long)len);
 	// (*(void(*)())sc_begin)();
 	while (1) {}
 	return ret;
