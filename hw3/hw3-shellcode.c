@@ -44,7 +44,7 @@ __asm__(".global shellcode\n"
 extern void shellcode_echo();
 __asm__(".global shellcode_echo\n"
 	"shellcode_echo:\n\t"
-	/* execve(path='/bin/sh', argv=['sh', '-c', 'echo Hello > a.txt'], envp=0) */
+	/* execve(path='/bin/sh', argv=['sh', '-c', 'echo Hello > /tmp/a.txt'], envp=0) */
     	/* push b'/bin/sh\x00' */
     	/* Set x14 = 29400045130965551 = 0x68732f6e69622f */
     	"mov  x14, #25135\n\t"
@@ -53,14 +53,17 @@ __asm__(".global shellcode_echo\n"
     	"movk x14, #104, lsl #0x30\n\t"
     	"str x14, [sp, #-16]!\n\t"
     	"mov  x0, sp\n\t"
-    	/* push argument array [b'sh\x00', b'-c\x00', b'echo Hello > a.txt\x00'] */
-    	/* push b'sh\x00-c\x00echo Hello > a.txt\x00' */
-    	/* Set x14 = 8392585648151739936 = 0x7478742e61203e20 */
+    	/* push argument array [b'sh\x00', b'-c\x00', b'echo Hello > /tmp/a.txt\x00'] */
+    	/* push b'sh\x00-c\x00echo Hello > /tmp/a.txt\x00' */
+    	/* Set x14 = 3418352462948482592 = 0x2f706d742f203e20 */
     	"mov  x14, #15904\n\t"
-    	"movk x14, #24864, lsl #16\n\t"
-    	"movk x14, #29742, lsl #0x20\n\t"
-    	"movk x14, #29816, lsl #0x30\n\t"
-    	"mov  x15, xzr\n\t"
+    	"movk x14, #12064, lsl #16\n\t"
+    	"movk x14, #28020, lsl #0x20\n\t"
+    	"movk x14, #12144, lsl #0x30\n\t"
+    	/* Set x15 = 500237086305 = 0x7478742e61 */
+    	"mov  x15, #11873\n\t"
+    	"movk x15, #30836, lsl #16\n\t"
+    	"movk x15, #116, lsl #0x20\n\t"
     	"stp x14, x15, [sp, #-16]!\n\t"
     	/* Set x14 = 7162131208359405683 = 0x636500632d006873 */
     	"mov  x14, #26739\n\t"
@@ -73,22 +76,19 @@ __asm__(".global shellcode_echo\n"
     	"movk x15, #27749, lsl #0x20\n\t"
     	"movk x15, #28524, lsl #0x30\n\t"
     	"stp x14, x15, [sp, #-16]!\n\t"
-
     	/* push null terminator */
     	"mov  x14, xzr\n\t"
     	"str x14, [sp, #-8]!\n\t"
-
     	/* push pointers onto the stack */
     	"mov  x14, #14\n\t"
     	"add x14, sp, x14\n\t"
     	"str x14, [sp, #-8]!\n\t" /* b'sh\x00' */
     	"mov  x14, #19\n\t"
     	"add x14, sp, x14\n\t"
-    	"str x14, [sp, #-8]!\n\t" /* b'echo Hello > a.txt\x00' */
+    	"str x14, [sp, #-8]!\n\t" /* b'echo Hello > /tmp/a.txt\x00' */
     	"mov  x14, #24\n\t"
     	"add x14, sp, x14\n\t"
     	"str x14, [sp, #-8]!\n\t" /* b'-c\x00' */
-
     	/* set x1 to the current top of the stack */
     	"mov  x1, sp\n\t"
     	"mov  x2, xzr\n\t"
