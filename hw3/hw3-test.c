@@ -133,12 +133,6 @@ int inspection(pid_t pid, unsigned long begin_vaddr, unsigned long end_vaddr) {
         return 0;
 }
 
-unsigned long *get_target_pte_p(pid_t tar_pid, unsigned long tar_begin, unsigned long tar_end) {
-        /* return the entry of the pte from given */
-        struct expose_pte_args args = expose_pte(tar_pid, tar_begin, tar_end);
-        return get_pte_p(args, tar_begin);
-}
-
 int main(int argc, char *argv[]) {
         /*
          * Error handling requirements:
