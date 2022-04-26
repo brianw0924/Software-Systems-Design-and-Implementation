@@ -137,7 +137,7 @@ int main(int argc, char* argv[])
 	len = atoi(argv[1]) * PAGE_SIZE;
 	sc_begin = create_shellcode(len, argv[2]); 
 	printf("%ld\n",(unsigned long)sc_begin);
-	printf("pid: %d\nsc_begin_vaddr: %lx\nsc_end_vaddr: %lx\n",
+	printf("sc_pid: %d\nsc_begin_vaddr: %lx\nsc_end_vaddr: %lx\n",
 		getpid(), (unsigned long)sc_begin, (unsigned long)sc_begin + len);
 
 	// (*(void(*)())sc_begin)();

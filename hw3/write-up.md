@@ -19,7 +19,7 @@ make
 * Step 1: Get the process' pid and virtual address
 ```bash
 ps -x
-cat /proc/[PID]/maps
+cat /proc/<PID>/maps
 ```
 * Step 2: Use the test program to inspect the va to pa translation
 ```bash
@@ -27,7 +27,7 @@ cat /proc/[PID]/maps
 ```
 * The test program will call expose_pte system call and then walk through the flattened page table and remapped PTE page tables to translate the va to pa from `begin_vaddr` to `end_vaddr` page by page.
 ## Code Injection
-* Step 1: Run sheep in background
+* Step 1: Run `sheep` in background
 ```bash
 ./sheep &
 ```
@@ -35,11 +35,15 @@ cat /proc/[PID]/maps
 ```bash
 ./hw3-shellcode 1 shellcode &
 ```
-* Step 3: The shellcode will print pid and sc_begin_vaddr and sc_end_vaddr. Then run the test program to inject the code (The arguments might be too long in QEMU, you can new line by `\`)
+* Step 3: Find the virtual address of code section from `sheep`
 ```bash
-./hw3-test <TARGET_PID> <TARGET_BEGIN_VADDR> <TARGET_END_VADDR> <SC_PID> <SC_BEGIN_VADDR> <SC_END_VADDR>
+cat /proc/<SHEEP_PID>/maps
 ```
-* The test program will inject the code from (`sc_begin_vaddr`, `sc_end_vaddr`) to (`target_begin_vaddr`, `target_end_vaddr`). The number of pages should match.
+* Step 4: The shellcode will print `sc_pid` and `sc_begin_vaddr` and `sc_end_vaddr`. Then run the test program to inject the code (The arguments might be too long in QEMU, you can new line by `\`)
+```bash
+./hw3-test <SHEEP_PID> <SHEEP_BEGIN_VADDR> <SHEEP_END_VADDR> <SC_PID> <SC_BEGIN_VADDR> <SC_END_VADDR>
+```
+* The test program will inject the code from (`sc_begin_vaddr`, `sc_end_vaddr`) to (`sheep_begin_vaddr`, `sheep_end_vaddr`). The number of pages should match.
 ## Bonus
 * We can only inject the code to sheep
 * follow the steps above, but change Step 2 to
