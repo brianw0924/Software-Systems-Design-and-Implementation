@@ -1,0 +1,88 @@
+diff --git a/fs/seccompfs/internal.h b/fs/seccompfs/internal.h
+new file mode 100644
+index 000000000000..f6e6e2248879
+--- /dev/null
++++ b/fs/seccompfs/internal.h
+@@ -0,0 +1,4 @@
++#include <linux/fs.h>
++#include <linux/types.h>
++
++#define ROOT_INO 1
+diff --git a/fs/seccompfs/root.c b/fs/seccompfs/root.c
+new file mode 100644
+index 000000000000..14e1c381fa30
+--- /dev/null
++++ b/fs/seccompfs/root.c
+@@ -0,0 +1,72 @@
++#include <linux/fs.h>
++#include <linux/fs_context.h>
++#include <linux/kernel.h>
++#include <linux/magic.h>
++#include <linux/slab.h>
++#include <linux/stat.h>
++#include <linux/string.h>
++#include <linux/time.h>
++#include <uapi/linux/mount.h>
++#include "internal.h"
++
++static const struct super_operations seccompfs_sops;
++static const struct inode_operations seccompfs_inode_ops;
++static const struct file_operations seccompfs_dir_ops;
++
++static int seccompfs_fill_super(struct super_block *s, struct fs_context *fc)
++{
++	// Initialize struct super_block here (e.g. s_flags, s_op, s_root, ...)
++}
++
++static const struct super_operations seccompfs_sops = {
++	.statfs		= simple_statfs,
++};
++
++static const struct inode_operations seccompfs_inode_ops = {
++	.lookup		= simple_lookup,
++	.getattr	= simple_getattr,
++};
++
++static int seccompfs_get_tree(struct fs_context *fc)
++{
++	// Call the appropriate get_tree_ API
++	// check out `get_tree_*` in `fs/super.c`
++}
++
++static const struct fs_context_operations seccompfs_context_ops = {
++	.get_tree	= seccompfs_get_tree,
++};
++
++static int seccompfs_init_fs_context(struct fs_context *fc)
++{
++	// Initialize fs_context here (e.g. ops)
++	return 0;
++}
++
++static const struct file_operations seccompfs_dir_ops = {
++	// Define dir operations here (e.g. open, iterate, close, release ...)
++	// check out `fs/libfs.c` and `include/linux/fs.h`
++};
++
++static struct file_system_type seccompfs_type = {
++	.name = "seccompfs",
++	.init_fs_context = seccompfs_init_fs_context,
++	.kill_sb = kill_litter_super,
++};
++
++static int __init init_seccompfs(void)
++{
++	int ret;
++	struct vfsmount *mount;
++
++	ret = register_filesystem(&seccompfs_type);
++	if (ret < 0)
++		return ret;
++
++	mount = kern_mount(&seccompfs_type);
++	if (IS_ERR(mount))
++		return PTR_ERR(mount);
++
++	return 0;
++}
++fs_initcall(init_seccompfs);
